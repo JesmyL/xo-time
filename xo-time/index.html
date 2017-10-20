@@ -1,809 +1,1607 @@
 <!DOCTYPE>
-<head>
- <title>XO</title>
- <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
- <script src="my-lib.js"></script>
- 
-</head>
-<body style=padding:0;margin:0 >
-<div style=width:100%;height:100%; id=content ></div>
-<script>
-'use strict';
-let dbName= 'xo-setings';
-class XO{
- constructor(content){
-  let S= this.S= mylib.getDB(dbName)|| {
-   color: {
-    light: '#ccc',
-    middle: '#999',
-    dark: '#333'
-   },
-   digits: 3,
-   players: [0, 1],
-   lineCount: 3,
-   playersImagines: [
-    [0],
-    [1,5,7,3,5,9],
-    [1,3,9,7],
-    [1,4,8,6,3,5,1]
-   ]
-  };
-  this.playersImagines= S.playersImagines;
-  this.contentBox= mylib.q(content, {
-   style: {
-    overflow: 'auto'
-   }
-  });
-  
-  let contextBoxComputed= getComputedStyle(this.contentBox);
-  let _ww= contextBoxComputed.width;
-  let _wh= contextBoxComputed.height;
-  let ww= this.ww= parseInt(_ww);
-  let wh= this.wh= parseInt(_wh);
-  let vmin= this.vmin= Math.min(ww, wh);
-  let landscape= this.landscape= ww> wh;
-  let digitsCount= S.digits;
-  
- }
- start(){
-  let S= this.S;
-  mylib.setDB(dbName, S);
-  
-  let finished= false;
-  let players= S.players;
-  let currentPlayer= S.players[0];
-  let currentPlayerIndex= 0;
-  let digitsCount= S.digits;
-  let lineCount= S.lineCount=== -1? S.digits: S.lineCount;
-  let borderBackgroundColor= S.color.dark;
-  
-  let landscape= this.landscape;
-  let vmin= this.vmin;
-  let ww= this.ww;
-  
-  let digitSize= this.digitSize= vmin/ digitsCount;
-  let lineWidth= this.lineWidth= vmin/(S.digits*10);
-  let netMargin= vmin/ (digitsCount* 10);
-  
-  
-  let ctrlPannel,
-   currentPlayerScreen,
-   refreshGameScreen,
-   getSettingsGameScreen;
-  let currentPlayerScreenSize= vmin/ 3/ digitsCount;
-  
-  let halfDigitSize= digitSize/ 2;
-  let ctrlPannelSize= Math.max(halfDigitSize, vmin/ 10);
-  let ctrlPannelCenter= ctrlPannelSize/ 2;
-  let ctrlPannelMargin= ctrlPannelSize/ 10;
-  let ctrlPannelPlayerImagineSize= ctrlPannelSize/ 3;
-  
-  let refreshQuestion= false;
-  let imagineOnBoard= false;
-  
-  let playerImagineStyle= {
-   stroke: S.color.light,
-   strokeWidth: lineWidth,
-   fill: borderBackgroundColor
-  }
-  
-  this.digitsLine= [];
-  for(let i=0; i<Math.pow(digitsCount, 2); i++) this.digitsLine.push(-1);
-  
-  let xoContent= mylib.cre('svg', {
-   NS: true,
-   justDoIt: th=> this.xoContent=th,
-   style: {
-    backgroundColor: borderBackgroundColor,
-    'width,height': vmin
-   },
-   in: this.contentBox
-  });
-  
-  this.drawBorder({
-   in: xoContent,
-   digitsCount: digitsCount,
-   netMargin: netMargin,
-   borderSize: vmin,
-   stroke: S.color.middle,
-   strokeWidth: lineWidth
-  });
-  let findLine= ()=> {
-   let digitsLine= this.digitsLine;
-   let digitsLineLength= digitsLine.length;
-   
-   for(let j=0; j<players.length; j++){
-    let player= players[j];
-    let filledCount= 0;
-    
-    for(let k=0; k<digitsLineLength; k+=digitsCount){
-     let countH= 0;
-     let countV= 0;
-     let firstH= -1;
-     let firstV= -1;
-     
-     for(let l=0; l<digitsCount; l++){
-      let forH= k+l;
-      let forV= k/digitsCount+digitsCount*l;
-      
-      if(digitsLine[forH]=== player){
-       firstH= firstH> -1? firstH: forH;
-       if(++countH>= lineCount) return [firstH, forH];
-      }else{
-       firstH= -1;
-       countH= 0;
-      }
-      
-      if(digitsLine[forV]=== player){
-       firstV= firstV> -1? firstV: forV;
-       if(++countV>= lineCount) return [firstV, forV];
-      }else{
-       firstV= -1;
-       countV= 0;
-      }
-     }
-    }
-    for(let k=0; k<digitsLineLength; k++){
-     let countN= 0;
-     let countZ= 0;
-     
-     let firstN= -1;
-     let firstZ= -1;
-     
-     for(let l=0, t=0; l<digitsLineLength; l+=digitsCount, t++){
-      let forN= k+l+t;
-      let forZ= k+l-t;
-      let firstNpos= (forN)% digitsCount;
-      let firstZpos= (forZ)% digitsCount;
-      
-      if(digitsLine[forN]=== player){
-       firstN= firstN> -1? firstN: forN;
-       if(++countN>= lineCount&& firstNpos>= lineCount-1) return [firstN, forN];
-      }else{
-       firstN= -1;
-       countN= 0;
-      }
-      
-      if(digitsLine[forZ]=== player){
-       firstZ= firstZ> -1? firstZ: forZ;
-       if(++countZ>= lineCount&& firstZpos< lineCount&& (digitsCount>lineCount|| firstZpos=== 0)) return [firstZ, forZ];
-      }else{
-       firstZ= -1;
-       countZ= 0;
-      }
-     }
-     if(this.digitsLine[k]> -1&& digitsLineLength=== ++filledCount) return[-1, 1];
-    }
-   }
-   return[-1, -1];
-  }
-  for(let i=0; i<digitsCount; i++){
-   for(let j=0; j<digitsCount; j++){
-    mylib.cre({
-     rect: {
-      NS: true,
-      in: xoContent,
-      x: netMargin+ digitSize* j- lineWidth/2,
-      y: netMargin+ digitSize* i- lineWidth/2,
-      style: {
-       'width,height': digitSize- lineWidth,
-       fill: borderBackgroundColor,
-       cursor: 'pointer'
-      },
-      on: ()=> {
-       if(finished) return;
-       imagineOnBoard= true;
-       if(refreshQuestion){
-        refreshQuestion= false;
-        refreshBoxComponents.change({
-         points: 'refresh'
-        });
-       }else{
-        refreshBoxComponents.change({
-         stroke: 'light',
-         active: true
-        });
-       }
-       
-       let tail;
-       let index= i*digitsCount+j;
-       let halfDigitSize= digitSize/2;
-       
-       if(this.digitsLine[index]> -1) return;
-       this.digitsLine[index]= S.players[currentPlayerIndex];
-       
-       mylib.q(xoContent, {
-        app: this.getPlayerImagination({
-         i: S.players[currentPlayerIndex++],
-         x: digitSize* j+ halfDigitSize,
-         y: digitSize* i+ halfDigitSize,
-         s: currentPlayerScreenSize,
-         style: playerImagineStyle,
-         class: 'active-players-imaginations'
-        })
-       });
-       if(currentPlayerIndex=== S.players.length) currentPlayerIndex= 0;
-       if((tail= findLine())[0]> -1){
-        finished= true;
-        let tail0= tail[0];
-        let tail1= tail[1];
-        
-        let x1= (tail0% digitsCount)* digitSize;
-        let y1= parseInt(tail0/ digitsCount)* digitSize;
-        let x2= (tail1% digitsCount)* digitSize;
-        let y2= parseInt(tail1/ digitsCount)* digitSize;
-        
-        mylib.q(xoContent, {
-         app: {
-          line: {
-           NS: true,
-           class: 'active-players-imaginations',
-           x1: x1+ digitSize*(y1=== y2? .1: x1=== x2? 0.5: x1> x2? .9: .1),
-           y1: y1+ digitSize*(x1=== x2? .1: y1=== y2? 0.5: .1),
-           x2: x2+ digitSize*(y1=== y2? .9: x1=== x2? 0.5: x1> x2? .1: .9),
-           y2: y2+ digitSize*(x1=== x2? .9: y1=== y2? 0.5: .9),
-           style: {
-            stroke: S.color.middle,
-            strokeWidth: lineWidth* 1.5
-           }
-          }
-         }
-        });
-       }else if(tail[0]=== -1&& tail[1]=== 1){
-        refreshQuestion= true;
-        mylib.q('.active-players-imaginations', {
-         style: {
-          stroke: S.color.middle
-         }
-        });
-       }
-       if(finished) return;
-       mylib.q(currentPlayerScreen, {
-        remChild: 0,
-        app: this.getPlayerImagination({
-         i: S.players[currentPlayerIndex],
-         x: ctrlPannelCenter,
-         y: ctrlPannelCenter,
-         s: ctrlPannelPlayerImagineSize,
-         ks: .5,
-         style: playerImagineStyle
-        })
-       });
-      }
-     }
-    });
-   }
-  }
-  
-  let refreshBoxComponents= {
-   active: false,
-   points: {
-    refresh: this.getPointsLine({
-     x: ctrlPannelCenter,
-     y: ctrlPannelCenter,
-     s: ctrlPannelPlayerImagineSize,
-     p: [14,1,3,9,78,58,8]
-    }),
-    question: this.getPointsLine({
-     x: ctrlPannelCenter,
-     y: ctrlPannelCenter,
-     s: ctrlPannelPlayerImagineSize,
-     p: [14,1,3,6,5,8]
-    })
-   },
-   change: Ss=> {
-    mylib.q(refreshGameScreen, {
-     with: {
-      0: {
-       add: Ss.points? {
-        points: refreshBoxComponents.points[Ss.points]
-       }: {},
-       _add: Ss.stroke? {
-        style: {
-         stroke: S.color[Ss.stroke]
-        }
-       }: {}
-      }
-     }
-    });
-    if(Ss.active) refreshBoxComponents.active= Ss.active;
-   }
-  }
-  let ctrlPannelThickness= (ctrlPannelSize+ ctrlPannelMargin* 2);
-  ctrlPannel= mylib.cre('div', {
-   inBefore: xoContent,
-   style: {
-    add: this.landscape&& this.vmin+ctrlPannelThickness*2< this.ww? {
-     position: 'absolute',
-     top: '0',
-     left: '0',
-     width: ctrlPannelThickness,
-     height: '100%',
-    }: {
-     height: ctrlPannelThickness+'px',
-    },
-    backgroundColor: S.color.middle,
-   },
-   app: mylib.group({
-    similars: {
-     NS: true,
-     style: {
-      backgroundColor: borderBackgroundColor,
-      'width,height': (ctrlPannelSize)+'px',
-      margin: (ctrlPannelMargin)+'px'
-     }
-    },
-    svg: {
-     justDoIt: th=> currentPlayerScreen=th,
-     app: this.getPlayerImagination({
-      i: currentPlayer,
-      x: ctrlPannelCenter,
-      y: ctrlPannelCenter,
-      s: ctrlPannelPlayerImagineSize,
-      ks: .5,
-      style: playerImagineStyle
-     })
-    },
-    _svg: {
-     justDoIt: th=> refreshGameScreen=th,
-     app: {
-      polyline: {
-       NS: true,
-       style: {
-        stroke: S.color.middle,
-        strokeWidth: lineWidth* .7,
-        fill: 'none'
-       },
-       points: refreshBoxComponents.points.refresh
-      }
-     },
-     on: ()=>{
-      if((refreshBoxComponents.active&& refreshQuestion)|| finished){
-       finished= false;
-       refreshQuestion= false;
-       imagineOnBoard= false;
-       this.digitsLine= this.digitsLine.map(e=>{return-1});
-       mylib.q('.active-players-imaginations', {
-        removeMe: true
-       });
-       refreshBoxComponents.change({
-        points: 'refresh',
-        stroke: 'middle',
-        active: false
-       });
-       currentPlayerIndex= 0;
-       mylib.q(currentPlayerScreen, {
-        remChild: 0,
-        app: this.getPlayerImagination({
-         i: S.players[0],
-         x: ctrlPannelCenter,
-         y: ctrlPannelCenter,
-         s: ctrlPannelPlayerImagineSize,
-         ks: .5,
-         style: playerImagineStyle
-        })
-       });
-      }else if(imagineOnBoard){
-       refreshQuestion= true;
-       refreshBoxComponents.change({
-        points: 'question',
-        stroke: 'light'
-       });
-      }
-     }
-    },
-    __svg: {
-     justDoIt: th=> getSettingsGameScreen=th,
-     app: {
-      polyline: {
-       NS: true,
-       style: playerImagineStyle,
-       points:  this.getPointsLine({
-        x: ctrlPannelCenter,
-        y: ctrlPannelCenter,
-        s: ctrlPannelPlayerImagineSize,
-        p: [6,5,58,45,25,5]
-       })
-      }
-     },
-     on: ()=> {
-      mylib.q(this.contentBox, {
-       remChild: -1
-      });
-      this.welcome();
-     }
-    },
-    ___svg: {
-     justDoIt: th=> getSettingsGameScreen=th,
-     app: {
-      polyline: {
-       NS: true,
-       style: playerImagineStyle,
-       points:  this.getPointsLine({
-        x: ctrlPannelCenter,
-        y: ctrlPannelCenter,
-        s: ctrlPannelPlayerImagineSize,
-        p: [12,78]
-       })
-      },
-      _polyline: {
-       NS: true,
-       style: playerImagineStyle,
-       points:  this.getPointsLine({
-        x: ctrlPannelCenter,
-        y: ctrlPannelCenter,
-        s: ctrlPannelPlayerImagineSize,
-        p: [23,89]
-       })
-      }
-     },
-     on: ()=> {
-      let pauseScreen;
-      mylib.q(this.contentBox, {
-       app: {
-        svg: {
-         NS: true,
-         justDoIt: th=> pauseScreen=th,
-         style: {
-          position: 'absolute',
-          left: '0',
-          top: '0',
-          backgroundColor: this.S.color.dark,
-          'width,height': '100%'
-         },
-         app: {
-          polygon: {
-           NS: true,
-           points: this.getPointsLine({
-            x: this.ww/2,
-            y: vmin/2,
-            s: vmin/5,
-            p: [1,7,6]
-           }),
-           style: {
-            'fill,stroke': this.S.color.light
-           },
-           on: ()=> {
-            pauseScreen.remove();
-           }
-          }
-         }
-        }
-       }
-      });
-      
-     }
-    }
-   })
-  });
-  
- }
- getPlayerImagination(S){
-  let styles= S.style|| {};
-  let style= {
-   stroke: styles.stroke|| this.S.color.light,
-   strokeWidth: (styles.strokeWidth|| 10)* (S.ks|| 1),
-   fill: styles.fill|| 'none'
-  }
-  return S.i? {
-   polygon: {
-    NS: true,
-    points: this.getPointsLine({
-     x: S.x,
-     y: S.y,
-     s: S.s,
-     p: this.playersImagines[S.i]
-    }),
-    add: S
-   }
-  }: {
-   circle: {
-    NS: true,
-    cx: S.x,
-    cy: S.y,
-    r: S.s,
-    add: S
-   }
-  }
- }
- drawBorder(S){
-  let digitsCount= S.digitsCount;
-  let box= S.in;
-  let netMargin= S.netMargin;
-  let borderSize= S.borderSize;
-  let stroke= S.stroke;
-  let strokeWidth= S.strokeWidth;
-  let digitSize= borderSize/ digitsCount;
-  let x= S.x|| 0;
-  let y= S.y|| 0;
-  let lineCount= this.S.lineCount;
-  let picks= [];
-  if(lineCount=== digitsCount) this.S.lineCount= -1;
-  
-  for(let i=0; i<digitsCount; i++){
-   let netDigitSize= digitSize* i;
-   let endPoint= borderSize- netMargin;
-   
-   picks.push(mylib.cre('rect', {
-    NS: true,
-    in: box,
-    style: {
-     stroke: stroke,
-     strokeWidth: strokeWidth,
-    },
-    x: netDigitSize+ x+ strokeWidth,
-    y: netMargin+ y,
-    style: {
-     'height,width': digitSize/2+ strokeWidth/2,
-     fill: this.S.color[lineCount=== -1|| i< lineCount? 'light': 'middle']
-    },
-    on: ()=> {
-     if(i<2) return;
-     picks.forEach((e, j, a)=> {
-      e.style.fill= this.S.color[i>=j? 'light': 'middle']
-     });
-     this.S.lineCount= (i+1=== digitsCount)? -1: i+1; 
-    }
-   }));
-    
-   if(i)
-   mylib.cre(mylib.group({
-    similars: {
-     NS: true,
-     in: box,
-     style: {
-      stroke: stroke,
-      strokeWidth: strokeWidth,
-     }
-    },
-    line: {
-     x1: netDigitSize+ x,
-     y1: netMargin+ y,
-     x2: netDigitSize+ x,
-     y2: endPoint+ y,
-    },
-    _line: {
-     x1: netMargin+ x,
-     y1: netDigitSize+ y,
-     x2: endPoint+ x,
-     y2: netDigitSize+ y,
-    }
-   }));
-  }
- }
- getPointsLine(S){
-  let size= S.s;
-  let x= S.x;
-  let y= S.y;
-  let line= [];
-  S.p.forEach((e, i, a)=> {
-   
-   let kx=
-    [1,4,7,14,47].indexOf(e)+1? -1:
-    [3,6,9,36,69].indexOf(e)+1? 1:
-    [15,48,12,45,78,24,57].indexOf(e)+1? -.5:
-    [26,59,23,56,89,35,68].indexOf(e)+1? .5: 0;
-   
-   let ky=
-    [1,2,3,12,23].indexOf(e)+1? -1:
-    [7,8,9,78,89].indexOf(e)+1? 1:
-    [24,35,14,25,36,15,26].indexOf(e)+1? -.5:
-    [57,68,47,58,69,48,59].indexOf(e)+1? .5: 0;
-   
-   line.push(x+size* kx);
-   line.push(y+size* ky);
-  });
-  return mylib.join(line, [',', ' ']);
- }
- welcome(){
-  let welcomeWindow,
-   xoWelcome, 
-   welcomeNetBox,
-   welcomeCountDigitsTextBox,
-   playerSelectionPannel;
-  let S= this.S;
-  let xoThis= this;
-  let vmin= this.vmin;
-  
-  mylib.q(this.contentBox, {
-   style: {
-    backgroundColor: this.S.color.dark,
-    textAlign: 'center'
-   },
-   app: {
-    div: {
-     justDoIt: th=>welcomeWindow=th,
-     style: {
-      margin: '0'
-     },
-     app: {
-      div: {
-       style: {
-        backgroundColor: S.color.middle,
-        width: '100%',
-        height: vmin/5,
-        textAlign: 'center',
-       },
-       app: {
-        svg: {
-         NS: true,
-         style: {
-          width: vmin/2,
-          height: '100%'
-         },
-         app: {
-          polygon: {
-           NS: true,
-           style: {
-            stroke: S.color.dark,
-            strokeWidth: vmin/40,
-            fill: 'rgba(0,0,0,0)'
-           },
-           points: this.getPointsLine({
-            x: vmin/4,
-            y: vmin/10,
-            s: vmin/15,
-            p: [1,5,7,8,6,2]
-           })
-          }
-         }
-        }
-       },
-       on: ()=>{
-        this.start();
-        welcomeWindow.remove();
-       }
-      },
-      _svg: {
-       NS: true,
-       justDoIt: th=>xoWelcome=th,
-       style: {
-        //position: 'absolute',
-        top: '0',
-        left: '0',
-        width: vmin,
-        height: vmin/2
-       },
-       app: mylib.group({
-        similars: {
-         NS: true,
-         style: {
-          stroke: S.color.light,
-          strokeWidth: vmin/30,
-          fill: 'rgba(0,0,0,0)'
-         },
-         on(){
-          let action= mylib.q(this, 'action');
-          if(action=== 'plus') xoThis.S.digits++;
-          else if(xoThis.S.digits<= 3) return;
-          else xoThis.S.digits--;
-          mylib.q(welcomeNetBox, {
-           remChild: -1
-          });
-          redrawBorder();
-          mylib.q(welcomeCountDigitsTextBox, {
-           textContent: xoThis.S.digits,
-           x: vmin/(2+ String(xoThis.S.digits).length*.3)
-          });
-         }
-        },
-        polygon: {
-         action: 'minus',
-         points: this.getPointsLine({
-          x: vmin/7,
-          y: vmin/4,
-          s: vmin/14,
-          p: [4,6]
-         })
-        },
-        _polygon: {
-         action: 'plus',
-         points: this.getPointsLine({
-          x: vmin- vmin/7,
-          y: vmin/4,
-          s: vmin/14,
-          p: [2,8,5,4,6,5]
-         })
-        }
-       }),
-       _app: mylib.group({
-        similars: {
-         NS: true,
-        },
-        g: {
-         justDoIt: th=>welcomeNetBox= th
-        },
-        text: {
-         justDoIt: th=>welcomeCountDigitsTextBox= th,
-         x: vmin/(2+ String(xoThis.S.digits).length*.3),
-         y: vmin/3,
-         textContent: xoThis.S.digits,
-         style: {
-          fontSize: vmin/4,
-          fill: S.color.light
-         },
-         _justDoIt: ()=> {
-          mylib.q(welcomeCountDigitsTextBox, {
-           //x: parseInt(getComputedStyle(welcomeCountDigitsTextBox).width)/2
-          });
-         }
-        }
-       })
-      },
-      _div: {
-       style: {
-        textAlign: 'center'
-       },
-       app: {
-        div: {
-         justDoIt: th=> playerSelectionPannel=th
-        }
-        
-       }
-      }
-     }
-    }
-   }
-  });
-  let playersImaginesBoxSize= vmin/ 4;
-  let playersImaginesCenter= vmin/ 8;
-  let playersImaginesSize= vmin/ 12;
-  let playersImaginesStrokeWidth= vmin/ 30;
-  
-  this.playersImagines.forEach((e, i, a)=> {
-   let playerImagine;
-   mylib.cre('svg', {
-    in: playerSelectionPannel,
-    NS: true,
-    style: {
-     'width,height': playersImaginesBoxSize,
-     backgroundColor: S.color.dark
-    },
-    app: this.getPlayerImagination({
-     i: i,
-     x: playersImaginesCenter,
-     y: playersImaginesCenter,
-     s: playersImaginesSize,
-     ks: 2,
-     style: {
-      stroke: S.players.indexOf(i)+1? S.color.light: S.color.middle,
-      strokeWidth: playersImaginesStrokeWidth,
-      fill: 'none'
-     },
-     justDoIt: th=> playerImagine= th
-    }),
-    on(){
-     let index= S.players.indexOf(i);
-     let inGame= index> -1;
-     if(S.players.length<= 2&& inGame) return;
-     
-     playerImagine.style.stroke= inGame? S.color.middle: S.color.light;
-     if(inGame) xoThis.S.players.splice(index, 1);
-     else{
-      xoThis.S.players.push(i);
-      xoThis.S.players.sort((a, b)=>a-b);
-     }
-    }
-   });
-  });
-  let redrawBorder= ()=>
-   this.drawBorder({
-    in: welcomeNetBox,
-    x: vmin/4,
-    digitsCount: xoThis.S.digits,
-    netMargin: vmin/ (xoThis.S.digits*10),
-    borderSize: vmin/2,
-    stroke: S.color.middle,
-    strokeWidth: vmin/(xoThis.S.digits*10)
-   });
-  redrawBorder();
-  
- }
-}
-let xo= new XO('#content');
-xo.welcome();
-//xo.start();
-</script>
-</body>
-</html>
-
+<head>
+ <title>XO</title>
+ <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+ <script src="my-lib.js"></script>
+ 
+</head>
+<body style=padding:0;margin:0 >
+<div style=width:100%;height:100%; id=content ></div>
+<script>
+
+'use strict';
+
+let dbName= 'xo-setings';
+
+class XO{
+
+ constructor(content){
+
+  let S= this.S= mylib.getDB(dbName)|| {
+
+   color: {
+
+    light: '#ccc',
+
+    middle: '#999',
+
+    dark: '#333'
+
+   },
+
+   digits: 3,
+
+   players: [0, 1],
+
+   lineCount: 3,
+
+   playersImagines: [
+
+    [0],
+
+    [1,5,7,3,5,9],
+
+    [1,3,9,7],
+
+    [1,4,8,6,3,5,1]
+
+   ]
+
+  };
+
+  this.playersImagines= S.playersImagines;
+
+  this.contentBox= mylib.q(content, {
+
+   style: {
+
+    overflow: 'auto'
+
+   }
+
+  });
+
+  
+
+  let contextBoxComputed= getComputedStyle(this.contentBox);
+
+  let _ww= contextBoxComputed.width;
+
+  let _wh= contextBoxComputed.height;
+
+  let ww= this.ww= parseInt(_ww);
+
+  let wh= this.wh= parseInt(_wh);
+
+  let vmin= this.vmin= Math.min(ww, wh);
+
+  let landscape= this.landscape= ww> wh;
+
+  let digitsCount= S.digits;
+
+  
+
+ }
+
+ start(){
+
+  let S= this.S;
+
+  mylib.setDB(dbName, S);
+
+  
+
+  let finished= false;
+
+  let players= S.players;
+
+  let currentPlayer= S.players[0];
+
+  let currentPlayerIndex= 0;
+
+  let digitsCount= S.digits;
+
+  let lineCount= S.lineCount=== -1? S.digits: S.lineCount;
+
+  let borderBackgroundColor= S.color.dark;
+
+  
+
+  let landscape= this.landscape;
+
+  let vmin= this.vmin;
+
+  let ww= this.ww;
+
+  
+
+  let digitSize= this.digitSize= vmin/ digitsCount;
+
+  let lineWidth= this.lineWidth= vmin/(S.digits*10);
+
+  let netMargin= vmin/ (digitsCount* 10);
+
+  
+
+  
+
+  let ctrlPannel,
+
+   currentPlayerScreen,
+
+   refreshGameScreen,
+
+   getSettingsGameScreen;
+
+  let currentPlayerScreenSize= vmin/ 3/ digitsCount;
+
+  
+
+  let halfDigitSize= digitSize/ 2;
+
+  let ctrlPannelSize= Math.max(halfDigitSize, vmin/ 10);
+
+  let ctrlPannelCenter= ctrlPannelSize/ 2;
+
+  let ctrlPannelMargin= ctrlPannelSize/ 10;
+
+  let ctrlPannelPlayerImagineSize= ctrlPannelSize/ 3;
+
+  
+
+  let refreshQuestion= false;
+
+  let imagineOnBoard= false;
+
+  
+
+  let playerImagineStyle= {
+
+   stroke: S.color.light,
+
+   strokeWidth: lineWidth,
+
+   fill: borderBackgroundColor
+
+  }
+
+  
+
+  this.digitsLine= [];
+
+  for(let i=0; i<Math.pow(digitsCount, 2); i++) this.digitsLine.push(-1);
+
+  
+
+  let xoContent= mylib.cre('svg', {
+
+   NS: true,
+
+   justDoIt: th=> this.xoContent=th,
+
+   style: {
+
+    backgroundColor: borderBackgroundColor,
+
+    'width,height': vmin
+
+   },
+
+   in: this.contentBox
+
+  });
+
+  
+
+  this.drawBorder({
+
+   in: xoContent,
+
+   digitsCount: digitsCount,
+
+   netMargin: netMargin,
+
+   borderSize: vmin,
+
+   stroke: S.color.middle,
+
+   strokeWidth: lineWidth
+
+  });
+
+  let findLine= ()=> {
+
+   let digitsLine= this.digitsLine;
+
+   let digitsLineLength= digitsLine.length;
+
+   
+
+   for(let j=0; j<players.length; j++){
+
+    let player= players[j];
+
+    let filledCount= 0;
+
+    
+
+    for(let k=0; k<digitsLineLength; k+=digitsCount){
+
+     let countH= 0;
+
+     let countV= 0;
+
+     let firstH= -1;
+
+     let firstV= -1;
+
+     
+
+     for(let l=0; l<digitsCount; l++){
+
+      let forH= k+l;
+
+      let forV= k/digitsCount+digitsCount*l;
+
+      
+
+      if(digitsLine[forH]=== player){
+
+       firstH= firstH> -1? firstH: forH;
+
+       if(++countH>= lineCount) return [firstH, forH];
+
+      }else{
+
+       firstH= -1;
+
+       countH= 0;
+
+      }
+
+      
+
+      if(digitsLine[forV]=== player){
+
+       firstV= firstV> -1? firstV: forV;
+
+       if(++countV>= lineCount) return [firstV, forV];
+
+      }else{
+
+       firstV= -1;
+
+       countV= 0;
+
+      }
+
+     }
+
+    }
+
+    for(let k=0; k<digitsLineLength; k++){
+
+     let countN= 0;
+
+     let countZ= 0;
+
+     
+
+     let firstN= -1;
+
+     let firstZ= -1;
+
+     
+
+     for(let l=0, t=0; l<digitsLineLength; l+=digitsCount, t++){
+
+      let forN= k+l+t;
+
+      let forZ= k+l-t;
+
+      let firstNpos= (forN)% digitsCount;
+
+      let firstZpos= (forZ)% digitsCount;
+
+      
+
+      if(digitsLine[forN]=== player){
+
+       firstN= firstN> -1? firstN: forN;
+
+       if(++countN>= lineCount&& firstNpos>= lineCount-1) return [firstN, forN];
+
+      }else{
+
+       firstN= -1;
+
+       countN= 0;
+
+      }
+
+      
+
+      if(digitsLine[forZ]=== player){
+
+       firstZ= firstZ> -1? firstZ: forZ;
+
+       if(++countZ>= lineCount&& firstZpos< lineCount&& (digitsCount>lineCount|| firstZpos=== 0)) return [firstZ, forZ];
+
+      }else{
+
+       firstZ= -1;
+
+       countZ= 0;
+
+      }
+
+     }
+
+     if(this.digitsLine[k]> -1&& digitsLineLength=== ++filledCount) return[-1, 1];
+
+    }
+
+   }
+
+   return[-1, -1];
+
+  }
+
+  for(let i=0; i<digitsCount; i++){
+
+   for(let j=0; j<digitsCount; j++){
+
+    mylib.cre({
+
+     rect: {
+
+      NS: true,
+
+      in: xoContent,
+
+      x: netMargin+ digitSize* j- lineWidth/2,
+
+      y: netMargin+ digitSize* i- lineWidth/2,
+
+      style: {
+
+       'width,height': digitSize- lineWidth,
+
+       fill: borderBackgroundColor,
+
+       cursor: 'pointer'
+
+      },
+
+      on: ()=> {
+
+       if(finished) return;
+
+       imagineOnBoard= true;
+
+       if(refreshQuestion){
+
+        refreshQuestion= false;
+
+        refreshBoxComponents.change({
+
+         points: 'refresh'
+
+        });
+
+       }else{
+
+        refreshBoxComponents.change({
+
+         stroke: 'light',
+
+         active: true
+
+        });
+
+       }
+
+       
+
+       let tail;
+
+       let index= i*digitsCount+j;
+
+       let halfDigitSize= digitSize/2;
+
+       
+
+       if(this.digitsLine[index]> -1) return;
+
+       this.digitsLine[index]= S.players[currentPlayerIndex];
+
+       
+
+       mylib.q(xoContent, {
+
+        app: this.getPlayerImagination({
+
+         i: S.players[currentPlayerIndex++],
+
+         x: digitSize* j+ halfDigitSize,
+
+         y: digitSize* i+ halfDigitSize,
+
+         s: currentPlayerScreenSize,
+
+         style: playerImagineStyle,
+
+         class: 'active-players-imaginations'
+
+        })
+
+       });
+
+       if(currentPlayerIndex=== S.players.length) currentPlayerIndex= 0;
+
+       if((tail= findLine())[0]> -1){
+
+        finished= true;
+
+        let tail0= tail[0];
+
+        let tail1= tail[1];
+
+        
+
+        let x1= (tail0% digitsCount)* digitSize;
+
+        let y1= parseInt(tail0/ digitsCount)* digitSize;
+
+        let x2= (tail1% digitsCount)* digitSize;
+
+        let y2= parseInt(tail1/ digitsCount)* digitSize;
+
+        
+
+        mylib.q(xoContent, {
+
+         app: {
+
+          line: {
+
+           NS: true,
+
+           class: 'active-players-imaginations',
+
+           x1: x1+ digitSize*(y1=== y2? .1: x1=== x2? 0.5: x1> x2? .9: .1),
+
+           y1: y1+ digitSize*(x1=== x2? .1: y1=== y2? 0.5: .1),
+
+           x2: x2+ digitSize*(y1=== y2? .9: x1=== x2? 0.5: x1> x2? .1: .9),
+
+           y2: y2+ digitSize*(x1=== x2? .9: y1=== y2? 0.5: .9),
+
+           style: {
+
+            stroke: S.color.middle,
+
+            strokeWidth: lineWidth* 1.5
+
+           }
+
+          }
+
+         }
+
+        });
+
+       }else if(tail[0]=== -1&& tail[1]=== 1){
+
+        refreshQuestion= true;
+
+        mylib.q('.active-players-imaginations', {
+
+         style: {
+
+          stroke: S.color.middle
+
+         }
+
+        });
+
+       }
+
+       if(finished) return;
+
+       mylib.q(currentPlayerScreen, {
+
+        remChild: 0,
+
+        app: this.getPlayerImagination({
+
+         i: S.players[currentPlayerIndex],
+
+         x: ctrlPannelCenter,
+
+         y: ctrlPannelCenter,
+
+         s: ctrlPannelPlayerImagineSize,
+
+         ks: .5,
+
+         style: playerImagineStyle
+
+        })
+
+       });
+
+      }
+
+     }
+
+    });
+
+   }
+
+  }
+
+  
+
+  let refreshBoxComponents= {
+
+   active: false,
+
+   points: {
+
+    refresh: this.getPointsLine({
+
+     x: ctrlPannelCenter,
+
+     y: ctrlPannelCenter,
+
+     s: ctrlPannelPlayerImagineSize,
+
+     p: [14,1,3,9,78,58,8]
+
+    }),
+
+    question: this.getPointsLine({
+
+     x: ctrlPannelCenter,
+
+     y: ctrlPannelCenter,
+
+     s: ctrlPannelPlayerImagineSize,
+
+     p: [14,1,3,6,5,8]
+
+    })
+
+   },
+
+   change: Ss=> {
+
+    mylib.q(refreshGameScreen, {
+
+     with: {
+
+      0: {
+
+       add: Ss.points? {
+
+        points: refreshBoxComponents.points[Ss.points]
+
+       }: {},
+
+       _add: Ss.stroke? {
+
+        style: {
+
+         stroke: S.color[Ss.stroke]
+
+        }
+
+       }: {}
+
+      }
+
+     }
+
+    });
+
+    if(Ss.active) refreshBoxComponents.active= Ss.active;
+
+   }
+
+  }
+
+  let ctrlPannelThickness= (ctrlPannelSize+ ctrlPannelMargin* 2);
+
+  ctrlPannel= mylib.cre('div', {
+
+   inBefore: xoContent,
+
+   style: {
+
+    add: this.landscape&& this.vmin+ctrlPannelThickness*2< this.ww? {
+
+     position: 'absolute',
+
+     top: '0',
+
+     left: '0',
+
+     width: ctrlPannelThickness,
+
+     height: '100%',
+
+    }: {
+
+     height: ctrlPannelThickness+'px',
+
+    },
+
+    backgroundColor: S.color.middle,
+
+   },
+
+   app: mylib.group({
+
+    similars: {
+
+     NS: true,
+
+     style: {
+
+      backgroundColor: borderBackgroundColor,
+
+      'width,height': (ctrlPannelSize)+'px',
+
+      margin: (ctrlPannelMargin)+'px'
+
+     }
+
+    },
+
+    svg: {
+
+     justDoIt: th=> currentPlayerScreen=th,
+
+     app: this.getPlayerImagination({
+
+      i: currentPlayer,
+
+      x: ctrlPannelCenter,
+
+      y: ctrlPannelCenter,
+
+      s: ctrlPannelPlayerImagineSize,
+
+      ks: .5,
+
+      style: playerImagineStyle
+
+     })
+
+    },
+
+    _svg: {
+
+     justDoIt: th=> refreshGameScreen=th,
+
+     app: {
+
+      polyline: {
+
+       NS: true,
+
+       style: {
+
+        stroke: S.color.middle,
+
+        strokeWidth: lineWidth* .7,
+
+        fill: 'none'
+
+       },
+
+       points: refreshBoxComponents.points.refresh
+
+      }
+
+     },
+
+     on: ()=>{
+
+      if((refreshBoxComponents.active&& refreshQuestion)|| finished){
+
+       finished= false;
+
+       refreshQuestion= false;
+
+       imagineOnBoard= false;
+
+       this.digitsLine= this.digitsLine.map(e=>{return-1});
+
+       mylib.q('.active-players-imaginations', {
+
+        removeMe: true
+
+       });
+
+       refreshBoxComponents.change({
+
+        points: 'refresh',
+
+        stroke: 'middle',
+
+        active: false
+
+       });
+
+       currentPlayerIndex= 0;
+
+       mylib.q(currentPlayerScreen, {
+
+        remChild: 0,
+
+        app: this.getPlayerImagination({
+
+         i: S.players[0],
+
+         x: ctrlPannelCenter,
+
+         y: ctrlPannelCenter,
+
+         s: ctrlPannelPlayerImagineSize,
+
+         ks: .5,
+
+         style: playerImagineStyle
+
+        })
+
+       });
+
+      }else if(imagineOnBoard){
+
+       refreshQuestion= true;
+
+       refreshBoxComponents.change({
+
+        points: 'question',
+
+        stroke: 'light'
+
+       });
+
+      }
+
+     }
+
+    },
+
+    __svg: {
+
+     justDoIt: th=> getSettingsGameScreen=th,
+
+     app: {
+
+      polyline: {
+
+       NS: true,
+
+       style: playerImagineStyle,
+
+       points:  this.getPointsLine({
+
+        x: ctrlPannelCenter,
+
+        y: ctrlPannelCenter,
+
+        s: ctrlPannelPlayerImagineSize,
+
+        p: [6,5,58,45,25,5]
+
+       })
+
+      }
+
+     },
+
+     on: ()=> {
+
+      mylib.q(this.contentBox, {
+
+       remChild: -1
+
+      });
+
+      this.welcome();
+
+     }
+
+    },
+
+    ___svg: {
+
+     justDoIt: th=> getSettingsGameScreen=th,
+
+     app: {
+
+      polyline: {
+
+       NS: true,
+
+       style: playerImagineStyle,
+
+       points:  this.getPointsLine({
+
+        x: ctrlPannelCenter,
+
+        y: ctrlPannelCenter,
+
+        s: ctrlPannelPlayerImagineSize,
+
+        p: [12,78]
+
+       })
+
+      },
+
+      _polyline: {
+
+       NS: true,
+
+       style: playerImagineStyle,
+
+       points:  this.getPointsLine({
+
+        x: ctrlPannelCenter,
+
+        y: ctrlPannelCenter,
+
+        s: ctrlPannelPlayerImagineSize,
+
+        p: [23,89]
+
+       })
+
+      }
+
+     },
+
+     on: ()=> {
+
+      let pauseScreen;
+
+      mylib.q(this.contentBox, {
+
+       app: {
+
+        svg: {
+
+         NS: true,
+
+         justDoIt: th=> pauseScreen=th,
+
+         style: {
+
+          position: 'absolute',
+
+          left: '0',
+
+          top: '0',
+
+          backgroundColor: this.S.color.dark,
+
+          'width,height': '100%'
+
+         },
+
+         app: {
+
+          polygon: {
+
+           NS: true,
+
+           points: this.getPointsLine({
+
+            x: this.ww/2,
+
+            y: vmin/2,
+
+            s: vmin/5,
+
+            p: [1,7,6]
+
+           }),
+
+           style: {
+
+            'fill,stroke': this.S.color.light
+
+           },
+
+           on: ()=> {
+
+            pauseScreen.remove();
+
+           }
+
+          }
+
+         }
+
+        }
+
+       }
+
+      });
+
+      
+
+     }
+
+    }
+
+   })
+
+  });
+
+  
+
+ }
+
+ getPlayerImagination(S){
+
+  let styles= S.style|| {};
+
+  let style= {
+
+   stroke: styles.stroke|| this.S.color.light,
+
+   strokeWidth: (styles.strokeWidth|| 10)* (S.ks|| 1),
+
+   fill: styles.fill|| 'none'
+
+  }
+
+  return S.i? {
+
+   polygon: {
+
+    NS: true,
+
+    points: this.getPointsLine({
+
+     x: S.x,
+
+     y: S.y,
+
+     s: S.s,
+
+     p: this.playersImagines[S.i]
+
+    }),
+
+    add: S
+
+   }
+
+  }: {
+
+   circle: {
+
+    NS: true,
+
+    cx: S.x,
+
+    cy: S.y,
+
+    r: S.s,
+
+    add: S
+
+   }
+
+  }
+
+ }
+
+ drawBorder(S){
+
+  let digitsCount= S.digitsCount;
+
+  let box= S.in;
+
+  let netMargin= S.netMargin;
+
+  let borderSize= S.borderSize;
+
+  let stroke= S.stroke;
+
+  let strokeWidth= S.strokeWidth;
+
+  let digitSize= borderSize/ digitsCount;
+
+  let x= S.x|| 0;
+
+  let y= S.y|| 0;
+
+  let lineCount= this.S.lineCount;
+
+  let picks= [];
+
+  if(lineCount=== digitsCount) this.S.lineCount= -1;
+
+  
+
+  for(let i=0; i<digitsCount; i++){
+
+   let netDigitSize= digitSize* i;
+
+   let endPoint= borderSize- netMargin;
+
+   
+
+   picks.push(mylib.cre('rect', {
+
+    NS: true,
+
+    in: box,
+
+    style: {
+
+     stroke: stroke,
+
+     strokeWidth: strokeWidth,
+
+    },
+
+    x: netDigitSize+ x+ strokeWidth,
+
+    y: netMargin+ y,
+
+    style: {
+
+     'height,width': digitSize/2+ strokeWidth/2,
+
+     fill: this.S.color[lineCount=== -1|| i< lineCount? 'light': 'middle']
+
+    },
+
+    on: ()=> {
+
+     if(i<2) return;
+
+     picks.forEach((e, j, a)=> {
+
+      e.style.fill= this.S.color[i>=j? 'light': 'middle']
+
+     });
+
+     this.S.lineCount= (i+1=== digitsCount)? -1: i+1; 
+
+    }
+
+   }));
+
+    
+
+   if(i)
+
+   mylib.cre(mylib.group({
+
+    similars: {
+
+     NS: true,
+
+     in: box,
+
+     style: {
+
+      stroke: stroke,
+
+      strokeWidth: strokeWidth,
+
+     }
+
+    },
+
+    line: {
+
+     x1: netDigitSize+ x,
+
+     y1: netMargin+ y,
+
+     x2: netDigitSize+ x,
+
+     y2: endPoint+ y,
+
+    },
+
+    _line: {
+
+     x1: netMargin+ x,
+
+     y1: netDigitSize+ y,
+
+     x2: endPoint+ x,
+
+     y2: netDigitSize+ y,
+
+    }
+
+   }));
+
+  }
+
+ }
+
+ getPointsLine(S){
+
+  let size= S.s;
+
+  let x= S.x;
+
+  let y= S.y;
+
+  let line= [];
+
+  S.p.forEach((e, i, a)=> {
+
+   
+
+   let kx=
+
+    [1,4,7,14,47].indexOf(e)+1? -1:
+
+    [3,6,9,36,69].indexOf(e)+1? 1:
+
+    [15,48,12,45,78,24,57].indexOf(e)+1? -.5:
+
+    [26,59,23,56,89,35,68].indexOf(e)+1? .5: 0;
+
+   
+
+   let ky=
+
+    [1,2,3,12,23].indexOf(e)+1? -1:
+
+    [7,8,9,78,89].indexOf(e)+1? 1:
+
+    [24,35,14,25,36,15,26].indexOf(e)+1? -.5:
+
+    [57,68,47,58,69,48,59].indexOf(e)+1? .5: 0;
+
+   
+
+   line.push(x+size* kx);
+
+   line.push(y+size* ky);
+
+  });
+
+  return mylib.join(line, [',', ' ']);
+
+ }
+
+ welcome(){
+
+  let welcomeWindow,
+
+   xoWelcome, 
+
+   welcomeNetBox,
+
+   welcomeCountDigitsTextBox,
+
+   playerSelectionPannel;
+
+  let S= this.S;
+
+  let xoThis= this;
+
+  let vmin= this.vmin;
+
+  
+
+  mylib.q(this.contentBox, {
+
+   style: {
+
+    backgroundColor: this.S.color.dark,
+
+    textAlign: 'center'
+
+   },
+
+   app: {
+
+    div: {
+
+     justDoIt: th=>welcomeWindow=th,
+
+     style: {
+
+      margin: '0'
+
+     },
+
+     app: {
+
+      div: {
+
+       style: {
+
+        backgroundColor: S.color.middle,
+
+        width: '100%',
+
+        height: vmin/5,
+
+        textAlign: 'center',
+
+       },
+
+       app: {
+
+        svg: {
+
+         NS: true,
+
+         style: {
+
+          width: vmin/2,
+
+          height: '100%'
+
+         },
+
+         app: {
+
+          polygon: {
+
+           NS: true,
+
+           style: {
+
+            stroke: S.color.dark,
+
+            strokeWidth: vmin/40,
+
+            fill: 'rgba(0,0,0,0)'
+
+           },
+
+           points: this.getPointsLine({
+
+            x: vmin/4,
+
+            y: vmin/10,
+
+            s: vmin/15,
+
+            p: [1,5,7,8,6,2]
+
+           })
+
+          }
+
+         }
+
+        }
+
+       },
+
+       on: ()=>{
+
+        this.start();
+
+        welcomeWindow.remove();
+
+       }
+
+      },
+
+      _svg: {
+
+       NS: true,
+
+       justDoIt: th=>xoWelcome=th,
+
+       style: {
+
+        //position: 'absolute',
+
+        top: '0',
+
+        left: '0',
+
+        width: vmin,
+
+        height: vmin/2
+
+       },
+
+       app: mylib.group({
+
+        similars: {
+
+         NS: true,
+
+         style: {
+
+          stroke: S.color.light,
+
+          strokeWidth: vmin/30,
+
+          fill: 'rgba(0,0,0,0)'
+
+         },
+
+         on(){
+
+          let action= mylib.q(this, 'action');
+
+          if(action=== 'plus') xoThis.S.digits++;
+
+          else if(xoThis.S.digits<= 3) return;
+
+          else xoThis.S.digits--;
+
+          mylib.q(welcomeNetBox, {
+
+           remChild: -1
+
+          });
+
+          redrawBorder();
+
+          mylib.q(welcomeCountDigitsTextBox, {
+
+           textContent: xoThis.S.digits,
+
+           x: vmin/(2+ String(xoThis.S.digits).length*.3)
+
+          });
+
+         }
+
+        },
+
+        polygon: {
+
+         action: 'minus',
+
+         points: this.getPointsLine({
+
+          x: vmin/7,
+
+          y: vmin/4,
+
+          s: vmin/14,
+
+          p: [4,6]
+
+         })
+
+        },
+
+        _polygon: {
+
+         action: 'plus',
+
+         points: this.getPointsLine({
+
+          x: vmin- vmin/7,
+
+          y: vmin/4,
+
+          s: vmin/14,
+
+          p: [2,8,5,4,6,5]
+
+         })
+
+        }
+
+       }),
+
+       _app: mylib.group({
+
+        similars: {
+
+         NS: true,
+
+        },
+
+        g: {
+
+         justDoIt: th=>welcomeNetBox= th
+
+        },
+
+        text: {
+
+         justDoIt: th=>welcomeCountDigitsTextBox= th,
+
+         x: vmin/(2+ String(xoThis.S.digits).length*.3),
+
+         y: vmin/3,
+
+         textContent: xoThis.S.digits,
+
+         style: {
+
+          fontSize: vmin/4,
+
+          fill: S.color.light
+
+         },
+
+         _justDoIt: ()=> {
+
+          mylib.q(welcomeCountDigitsTextBox, {
+
+           //x: parseInt(getComputedStyle(welcomeCountDigitsTextBox).width)/2
+
+          });
+
+         }
+
+        }
+
+       })
+
+      },
+
+      _div: {
+
+       style: {
+
+        textAlign: 'center'
+
+       },
+
+       app: {
+
+        div: {
+
+         justDoIt: th=> playerSelectionPannel=th
+
+        }
+
+        
+
+       }
+
+      }
+
+     }
+
+    }
+
+   }
+
+  });
+
+  let playersImaginesBoxSize= vmin/ 4;
+
+  let playersImaginesCenter= vmin/ 8;
+
+  let playersImaginesSize= vmin/ 12;
+
+  let playersImaginesStrokeWidth= vmin/ 30;
+
+  
+
+  this.playersImagines.forEach((e, i, a)=> {
+
+   let playerImagine;
+
+   mylib.cre('svg', {
+
+    in: playerSelectionPannel,
+
+    NS: true,
+
+    style: {
+
+     'width,height': playersImaginesBoxSize,
+
+     backgroundColor: S.color.dark
+
+    },
+
+    app: this.getPlayerImagination({
+
+     i: i,
+
+     x: playersImaginesCenter,
+
+     y: playersImaginesCenter,
+
+     s: playersImaginesSize,
+
+     ks: 2,
+
+     style: {
+
+      stroke: S.players.indexOf(i)+1? S.color.light: S.color.middle,
+
+      strokeWidth: playersImaginesStrokeWidth,
+
+      fill: 'none'
+
+     },
+
+     justDoIt: th=> playerImagine= th
+
+    }),
+
+    on(){
+
+     let index= S.players.indexOf(i);
+
+     let inGame= index> -1;
+
+     if(S.players.length<= 2&& inGame) return;
+
+     
+
+     playerImagine.style.stroke= inGame? S.color.middle: S.color.light;
+
+     if(inGame) xoThis.S.players.splice(index, 1);
+
+     else{
+
+      xoThis.S.players.push(i);
+
+      xoThis.S.players.sort((a, b)=>a-b);
+
+     }
+
+    }
+
+   });
+
+  });
+
+  let redrawBorder= ()=>
+
+   this.drawBorder({
+
+    in: welcomeNetBox,
+
+    x: vmin/4,
+
+    digitsCount: xoThis.S.digits,
+
+    netMargin: vmin/ (xoThis.S.digits*10),
+
+    borderSize: vmin/2,
+
+    stroke: S.color.middle,
+
+    strokeWidth: vmin/(xoThis.S.digits*10)
+
+   });
+
+  redrawBorder();
+
+  
+
+ }
+
+}
+
+let xo= new XO('#content');
+
+xo.welcome();
+
+//xo.start();
+
+</script>
+
+</body>
+
+</html>
+
